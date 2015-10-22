@@ -1,0 +1,125 @@
+% Fiona Byrne
+% Assignment 2: Solving a Skyscraper Sudoku puzzle
+
+
+:- use_module(library(clpfd)).
+:- use_module(library(lists)).
+
+% skysudoku(SP, SS): SS is a solution of the Skyscraper Sudoku puzzle SP.
+
+skysudoku(ss(K, Clues), SS):-
+	M is K*K, length(SS, M),
+	consistent(SS, M, K),
+	split(Clues, Given, Visible),
+	given(Given, M, SS),
+	visible(Visible, M, SS),
+	append(SS, Matrix),
+	labeling([ffc], Matrix).
+
+% apply regular sudoku constraints
+consistent(SS, M, K):-
+	rows(M, SS),
+	transpose(SS, SS1), rows(M, SS1),
+	subgrids(K, SS).
+
+% insert the given numbers
+given([], _, _).
+given([Clue|Rest], M, SS):-
+	Clue =.. [g, N,R, C],
+	length(Row, M),
+	nth1(R, SS, Row), 
+	nth1(C, Row, N), 
+	given(Rest, M, SS). 
+
+% apply the visibility contraints
+visible([], _,  _).
+visible([Clue|Rest], M, SS):-
+	Clue =.. [v, V, Dir, RC],
+	( Dir=n -> columnToList(RC, SS, List)
+	; Dir=e -> nth1(RC, SS, List1), reverse(List1, List)
+	; Dir=s -> columnToList(RC, SS, List1), reverse(List1, List)
+	; Dir=w, nth1(RC, SS, List)),
+	length(List, M), domain(List,1, M), all_distinct(List),
+	visnum(List, V),
+	visible(Rest, M, SS).
+
+%-----------------------------------------------------------------------%
+%-------------------------SKYSUDOKU HELPERS-----------------------------%
+%-----------------------------------------------------------------------%
+
+% split(+Clues, -Given, -Visible): given a list of clues Clues, returns a
+% list Given of terms g(_) and a list Visible of terms v(_)
+split([], [], []).
+split([G|Clues], [G|Gs], Visible):-
+	G =.. [g, _, _, _], 
+	!,
+	split(Clues, Gs, Visible).
+split([V|Clues], Given, [V|Vs]):-
+	split(Clues, Given, Vs).
+
+%-----------------------------------------------------------------------%
+%-------------------------VISIBLE HELPERS-------------------------------%
+%-----------------------------------------------------------------------%
+% visnum/2 based off the code I wrote during an in-class practice session
+
+% visnum(L, K): the number of left-visible numbers in L is K. 
+visnum([], 0).
+visnum([L|Ls], K):-
+	visnum(Ls, K, L).
+visnum([], 1, _).
+visnum([Head|Tail],K, Greatest):-
+	(Head #> Greatest) #<=> B,
+	B #=> Greatest1 #= Head, 
+	#\B #=> Greatest1 #= Greatest,
+	K #= K1+B,  
+	visnum(Tail, K1, Greatest1).
+
+% given a list of lists, returns a list containing the cth element 
+% of every sublist
+columnToList(_, [], _).
+columnToList(C, [Row|Rest], [X|List]):-
+	length(Rest, L), length(List, L),
+	nth1(C, Row, X),
+	columnToList(C, Rest, List).
+
+%-----------------------------------------------------------------------%
+%-------------------------CONSISTENT HELPERS----------------------------%
+%-----------------------------------------------------------------------%
+% these predicates based off the code I wrote for Assignment 1 and the
+% week 8 homework
+
+% checks if every row is of length M and contains each integer from 1 to 
+% M exactly once
+rows(_, []).
+rows(M, [Head|Tail]):-
+	length(Head, M),
+	domain(Head, 1, M),
+	all_distinct(Head),
+	rows(M, Tail).
+
+% checks that every KxK subgrid contains each integer between 1 and M 
+% exactly once
+subgrids(_,[]).
+subgrids(K, SS):-
+	take_X(SS, K, Part, Remaining),
+	subgridToList(Part, K, [], List, Rest),
+	M is K*K, domain(List, 1, M),
+	all_distinct(List),
+	head(Rest, R),
+	( R \== [] ->
+	append(Rest, Remaining, Matrix), subgrids(K, Matrix)
+	; subgrids(K, Remaining)
+	).
+
+% returns a KxK subgrid in the form of a single list
+subgridToList([], _, List, List, []).
+subgridToList([Head|SGrid], K, ListSoFar, List, [Rest|Rests]):-
+	take_X(Head, K, Part, Rest),
+	append(Part, ListSoFar, ListSoFar1),
+	subgridToList(SGrid, K, ListSoFar1, List, Rests).	
+
+% returns the first X elements of a given list
+take_X([], _, [], []).
+take_X(List, X, List1, Remaining):-
+	length(List1, X),
+	append(List1, Remaining, List).
